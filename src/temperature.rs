@@ -1,5 +1,6 @@
 
 use crate::cli_error::CliError;
+use crate::dht::*;
 
 use rppal::gpio::{Gpio, Level, Mode};
 use std::thread::sleep;
@@ -14,11 +15,11 @@ impl Temperature {
 }
 
 pub trait ITemperature {
-    fn get_bits(&self, pin: u8) -> Result<(), CliError>;
+    fn read(&self, pin: u8) -> Result<(), CliError>;
 }
 
 impl ITemperature for Temperature {
-    fn get_bits(&self, pin: u8) -> Result<(), CliError> {
+    fn read(&self, pin: u8) -> Result<(), CliError> {
         let mut dht_pin: rppal::gpio::IoPin = Gpio::new()?.get(pin)?.into_io(Mode::Output);
 
         dht_pin.write(Level::High);
@@ -27,6 +28,21 @@ impl ITemperature for Temperature {
         sleep(Duration::from_millis(20));
 
         dht_pin.set_mode(Mode::Input);
+        tiny_sleep();
+
+        let mut count: usize = 0;
+
+        // if the dht returns only high, the dht did not get proper data.
+        while dht_pin.read() == Level::High {
+            count = count + 1;
+
+            if count > MAX_COUNT {
+                return Err(CliError::Error(String::from("Timeout")));
+            }
+        }
+
+        // read
+
         Ok(())
     }
 }
