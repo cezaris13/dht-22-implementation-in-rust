@@ -1,18 +1,6 @@
 use std::ptr::read_volatile;
 use std::ptr::write_volatile;
 
-use std::thread::sleep;
-use std::time::Duration;
-
-use rppal::gpio::Gpio;
-use rppal::gpio::Level;
-use rppal::gpio::Mode;
-
-use libc::sched_param;
-use libc::sched_setscheduler;
-use libc::SCHED_FIFO;
-use libc::SCHED_OTHER;
-
 /// A temperature and humidity reading from the DHT22.
 #[derive(Debug, Clone, Copy)]
 pub struct Reading {
@@ -39,7 +27,6 @@ impl From<rppal::gpio::Error> for ReadingError {
     }
 }
 
-pub const MAX_COUNT: usize = 32000;
 pub const DHT_PULSES: usize = 41;
 
 pub fn tiny_sleep() {
@@ -47,28 +34,6 @@ pub fn tiny_sleep() {
     unsafe {
         while read_volatile(&mut i) < 50 {
             write_volatile(&mut i, read_volatile(&mut i) + 1);
-        }
-    }
-}
-
-fn set_max_priority() {
-    unsafe {
-        let param = sched_param { sched_priority: 32 };
-        let result = sched_setscheduler(0, SCHED_FIFO, &param);
-
-        if result != 0 {
-            // panic!("Error setting priority, you may not have cap_sys_nice capability");
-        }
-    }
-}
-
-fn set_default_priority() {
-    unsafe {
-        let param = sched_param { sched_priority: 0 };
-        let result = sched_setscheduler(0, SCHED_OTHER, &param);
-
-        if result != 0 {
-            panic!("Error setting priority, you may not have cap_sys_nice capability");
         }
     }
 }
@@ -115,6 +80,11 @@ pub fn decode(arr: [usize; DHT_PULSES * 2]) -> Result<Reading, ReadingError> {
     let t_dec = (data[2] & 0x7f) as u16 * 256 + data[3] as u16;
     let mut t = t_dec as f32 / 10.0f32;
     if (data[2] & 0x80) != 0 {
+
+
+
+
+
         t *= -1.0f32;
     }
 
@@ -122,162 +92,4 @@ pub fn decode(arr: [usize; DHT_PULSES * 2]) -> Result<Reading, ReadingError> {
         temperature: t,
         humidity: h,
     })
-}
-
-/// Read temperature and humidity from a DHT22 connected to a Gpio pin on a Raspberry Pi.
-///
-/// On a Raspberry Pi this is implemented using bit-banging which is very error-prone.  It will
-/// fail 30% of the time.  You should write code to handle this.  In addition you should not
-/// attempt a reading more frequently than once every 2 seconds because the DHT22 hardware does
-/// not support that.
-///
-pub fn read(pin: u8) -> Result<Reading, ReadingError> {
-    let mut gpio = match Gpio::new() {
-        Err(e) => return Err(ReadingError::Gpio(e)),
-        Ok(g) => match g.get(pin) {
-            Err(e) => return Err(ReadingError::Gpio(e)),
-            Ok(pin) => pin.into_io(Mode::Output),
-        },
-    };
-
-    let mut pulse_counts: [usize; DHT_PULSES * 2] = [0; DHT_PULSES * 2];
-
-    set_max_priority();
-
-    gpio.write(Level::High);
-    sleep(Duration::from_millis(500));
-
-    gpio.write(Level::Low);
-    sleep(Duration::from_millis(20));
-
-    gpio.set_mode(Mode::Input);
-
-    // Sometimes the pin is briefly low.
-    tiny_sleep();
-
-    let mut count: usize = 0;
-
-    while gpio.read() == Level::High {
-        count = count + 1;
-
-        if count > MAX_COUNT {
-            return Result::Err(ReadingError::Timeout);
-        }
-    }
-
-    for c in 0..DHT_PULSES {
-        let i = c * 2;
-
-        while gpio.read() == Level::Low {
-            pulse_counts[i] = pulse_counts[i] + 1;
-
-            if pulse_counts[i] > MAX_COUNT {
-                return Result::Err(ReadingError::Timeout);
-            }
-        }
-
-        while gpio.read() == Level::High {
-            pulse_counts[i + 1] = pulse_counts[i + 1] + 1;
-
-            if pulse_counts[i + 1] > MAX_COUNT {
-                return Result::Err(ReadingError::Timeout);
-            }
-        }
-    }
-
-    set_default_priority();
-
-    decode(pulse_counts)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::decode;
-    use super::ReadingError;
-
-    #[test]
-    fn from_spec_positive_temp() {
-        let arr = [
-            80, // initial 80us low period
-            80, // initial 80us high period
-            // humidity
-            50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 70, 50, 26, 50, 70, 50, 26, 50, 26,
-            50, 26, 50, 70, 50, 70, 50, 26, 50, 26, // temp
-            50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 70, 50, 26, 50, 70, 50, 26,
-            50, 70, 50, 70, 50, 70, 50, 70, 50, 70, // checksum
-            50, 70, 50, 70, 50, 70, 50, 26, 50, 70, 50, 70, 50, 70, 50, 26,
-        ];
-
-        let x = decode(arr).unwrap();
-        assert!(x.humidity == 65.2);
-        assert!(x.temperature == 35.1);
-    }
-
-    #[test]
-    fn from_spec_negative_temp() {
-        let arr = [
-            80, // initial 80us low period
-            80, // initial 80us high period
-            // humidity
-            50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 70, 50, 26, 50, 70, 50, 26, 50, 26,
-            50, 26, 50, 70, 50, 70, 50, 26, 50, 26, // temp
-            50, 70, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 70, 50, 70,
-            50, 26, 50, 26, 50, 70, 50, 26, 50, 70, // checksum
-            50, 26, 50, 70, 50, 70, 50, 70, 50, 26, 50, 26, 50, 70, 50, 70,
-        ];
-
-        let x = decode(arr).unwrap();
-        assert!(x.humidity == 65.2);
-        assert!(x.temperature == -10.1);
-    }
-
-    #[test]
-    fn checksum() {
-        let arr = [
-            80, // initial 80us low period
-            80, // initial 80us high period
-            // humidity
-            50, 26, 50, 26, 50, 26, 50, 26, 50, 70, 50, 26, 50, 70, 50, 26, 50, 70, 50, 26, 50, 26,
-            50, 26, 50, 70, 50, 70, 50, 26, 50, 26, // temp
-            50, 70, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 26, 50, 70, 50, 70,
-            50, 26, 50, 26, 50, 70, 50, 26, 50, 70, // checksum
-            50, 26, 50, 70, 50, 70, 50, 70, 50, 26, 50, 26, 50, 70, 50, 70,
-        ];
-
-        match decode(arr) {
-            Ok(_) => {
-                panic!("should have failed");
-            }
-            Err(e) => {
-                match e {
-                    ReadingError::Checksum => {
-                        // ok
-                    }
-                    _ => {
-                        panic!("should have Checksum, got {:?} instead", e);
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn sample1() {
-        let arr = [
-            458, // initial 80us low period
-            328, // initial 80us high period
-            // humidity
-            320, 101, 249, 153, 314, 153, 320, 154, 317, 153, 316, 153, 321, 431, 320, 147, 397,
-            154, 315, 435, 316, 154, 320, 431, 320, 430, 319, 431, 320, 431, 320, 426,
-            // temperature
-            401, 148, 319, 154, 316, 154, 320, 150, 320, 154, 315, 154, 320, 149, 320, 148, 397,
-            154, 319, 430, 321, 430, 321, 431, 320, 429, 318, 432, 320, 150, 320, 147,
-            // checksum
-            379, 434, 316, 434, 317, 153, 320, 431, 317, 435, 316, 435, 317, 153, 320, 425,
-        ];
-
-        let x = decode(arr).unwrap();
-        assert_eq!(x.humidity, 60.7);
-        assert_eq!(x.temperature, 12.4);
-    }
 }
