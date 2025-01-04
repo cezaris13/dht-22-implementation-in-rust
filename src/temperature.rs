@@ -23,6 +23,8 @@ pub trait ITemperature {
     fn read_pulses(&self, pin: &IoPin, level: Level) -> Result<f32, CliError>;
 
     fn decode(&self, pulses: Vec<f32>) -> Result<(f32, f32), CliError>;
+
+    fn to_decimal(&self, bits: &Vec<u8>) -> i32;
 }
 
 impl ITemperature for Temperature {
@@ -54,19 +56,21 @@ impl ITemperature for Temperature {
         let sum: f32 = pulse_counts
             .iter()
             .step_by(2)
-            .take(DHT_PULSES)
+            .skip(1) // remove initial 80ms pulse
+            .take(DHT_PULSES - 1)
             .sum();
 
-        let average = sum / DHT_PULSES as f32;
+        let average = sum / (DHT_PULSES as f32- 1.0);
 
         let time_coefficient = average / 50.0;
 
         let modified_pulses = pulse_counts
             .iter()
+            .skip(2) // remove 2 initial 80ms pulses
             .map(|pulse| pulse / time_coefficient)
             .collect::<Vec<f32>>();
 
-        println!("{:?}", modified_pulses);
+        self.decode(modified_pulses)?;
         Ok(())
     }
 
@@ -83,7 +87,63 @@ impl ITemperature for Temperature {
     }
 
     fn decode(&self, pulses: Vec<f32>) -> Result<(f32, f32), CliError> {
-        todo!()
+        let pulses = pulses
+            .iter()
+            .skip(1)
+            .step_by(2)
+            .take(DHT_PULSES - 1)
+            .map(|x| {
+                if *x > 50.0 {
+                    1 as u8
+                } else {
+                    0 as u8
+                }
+            })
+            .collect::<Vec<u8>>();
+
+        let chunks :Vec<Vec<u8>> = pulses
+            .chunks(8)
+            .map(|s| s.into())
+            .collect();
+
+        let result: Vec<u8> = chunks
+            .iter()
+            .map(|arr|  self.to_decimal(arr) as u8)
+            .collect();
+
+        // checking checksum if first 4 numbers mod 255 are the same as the last one
+        let sum: u8 = result.iter().take(4).sum();
+
+        if let Some(last) = result.last() {
+            if sum != *last {
+               return Err(CliError::Error(String::from("Checksum failed.")));
+            }
+        }
+
+        let temperature = chunks[2]
+            .iter()
+            .chain(chunks[3].iter())
+            .copied()
+            .collect::<Vec<u8>>();
+
+        let humidity = chunks[0]
+            .iter()
+            .chain(chunks[1].iter())
+            .copied()
+            .collect::<Vec<u8>>();
+
+        println!("temperature: {:?}", self.to_decimal(&temperature) as f32 / 10.0);
+        println!("humidity: {:?}", self.to_decimal(&humidity) as f32 / 10.0);
+
+        Ok((0.0,0.0))
     }
 
+    fn to_decimal(&self, bits: &Vec<u8>) -> i32 {
+        let mut result: i32 = 0;
+        for &bit in bits.iter() {
+            result = (result << 1) | bit as i32;
+        }
+
+        result
+    }
 }
