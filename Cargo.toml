@@ -1,0 +1,15 @@
+[package]
+name = "RustTemperature"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.89"
+dht-embedded = "0.4.0"
+dht22_pi = "1.0.0"
+gpio-cdev = "0.6.0"
+hal_sensor_dht = "0.1.0"
+libc = "0.2.158"
+linux-embedded-hal = "0.4.0"
+rppal = "0.19.0"
+tracing = "0.1.40"
