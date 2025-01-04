@@ -20,7 +20,9 @@ impl Temperature {
 pub trait ITemperature {
     fn read(&self, pin: u8) -> Result<(), CliError>;
 
-    fn read_pulses(&self, pin: &IoPin, level: Level) -> Result<usize, CliError>;
+    fn read_pulses(&self, pin: &IoPin, level: Level) -> Result<f32, CliError>;
+
+    fn decode(&self, pulses: Vec<f32>) -> Result<(f32, f32), CliError>;
 }
 
 impl ITemperature for Temperature {
@@ -38,8 +40,8 @@ impl ITemperature for Temperature {
         // if the dht returns only high, the dht did not get proper data.
         self.read_pulses(&dht_pin, Level::High)?;
 
-        let mut pulse_counts: [usize; DHT_PULSES * 2] = [0; DHT_PULSES * 2];
-        
+        let mut pulse_counts: [f32; DHT_PULSES * 2] = [0.0; DHT_PULSES * 2];
+
         // read high and low pulses from the sensor
         for c in 0..DHT_PULSES {
             let i = c * 2;
@@ -48,20 +50,40 @@ impl ITemperature for Temperature {
             pulse_counts[i + 1] = self.read_pulses(&dht_pin, Level::High)?;
         }
 
-        println!("{:?}", pulse_counts);
+        // take low pulses values, since we know that their time value is 50ms, get the average, and modify the timings of the list of pulses
+        let sum: f32 = pulse_counts
+            .iter()
+            .step_by(2)
+            .take(DHT_PULSES)
+            .sum();
 
+        let average = sum / DHT_PULSES as f32;
+
+        let time_coefficient = average / 50.0;
+
+        let modified_pulses = pulse_counts
+            .iter()
+            .map(|pulse| pulse / time_coefficient)
+            .collect::<Vec<f32>>();
+
+        println!("{:?}", modified_pulses);
         Ok(())
     }
 
-    fn read_pulses(&self, pin: &IoPin, level: Level) -> Result<usize, CliError> {
-        let mut pulse_count = 0;
+    fn read_pulses(&self, pin: &IoPin, level: Level) -> Result<f32, CliError> {
+        let mut pulse_count = 0.0;
         while pin.read() == level {
-            pulse_count = pulse_count + 1;
+            pulse_count = pulse_count + 1.0;
 
-            if pulse_count > MAX_COUNT {
+            if pulse_count > MAX_COUNT as f32 {
                 return Err(CliError::Error(String::from("Timeout")));
             }
         }
         Ok(pulse_count)
     }
+
+    fn decode(&self, pulses: Vec<f32>) -> Result<(f32, f32), CliError> {
+        todo!()
+    }
+
 }
