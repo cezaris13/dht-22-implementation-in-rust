@@ -34,7 +34,7 @@ pub trait ITemperature {
 
     fn decode(&self, pulses: Vec<usize>) -> Result<TemperatureReading, CliError>;
 
-    fn to_decimal(&self, bits: &Vec<u8>) -> i32;
+    fn to_decimal(&self, bits: &Vec<u8>, signed: bool) -> i32;
 
     fn check_checksum(&self, chunks: &Vec<Vec<u8>>) -> Result<(), CliError>;
 }
@@ -134,15 +134,21 @@ impl ITemperature for Temperature {
             .collect::<Vec<u8>>();
 
         Ok (TemperatureReading {
-            temperature: self.to_decimal(&temperature) as f32 / 10.0,
-            humidity: self.to_decimal(&humidity) as f32 / 10.0
+            temperature: self.to_decimal(&temperature, true) as f32 / 10.0,
+            humidity: self.to_decimal(&humidity, false) as f32 / 10.0
         })
     }
 
-    fn to_decimal(&self, bits: &Vec<u8>) -> i32 {
-        let mut result = 0;
-        for &bit in bits.iter() {
-            result = (result << 1) | bit as i32;
+    fn to_decimal(&self, bits: &Vec<u8>, signed: bool) -> i32 {
+        let skip = signed as usize; // If signed, skip 1 bit; otherwise, skip 0.
+
+        let mut result = bits
+            .iter()
+            .skip(skip)
+            .fold(0, |acc, &bit| (acc << 1) | bit as i32);
+
+        if signed && bits[0] == 1 {
+            result = -result;
         }
 
         result
@@ -151,11 +157,14 @@ impl ITemperature for Temperature {
     fn check_checksum(&self, chunks: &Vec<Vec<u8>>) -> Result<(), CliError> {
         let chunks_as_u8: Vec<u8> = chunks
             .iter()
-            .map(|arr|  self.to_decimal(arr) as u8)
+            .map(|arr|  self.to_decimal(arr, false) as u8)
             .collect();
 
         // checking checksum if first 4 numbers mod 255 are the same as the last one
-        let sum: u8 = chunks_as_u8.iter().take(4).sum();
+        let sum: u8 = chunks_as_u8
+            .iter()
+            .take(4)
+            .fold(0u8, |acc, &x| acc.wrapping_add(x));
 
         if let Some(last) = chunks_as_u8.last() {
             if sum != *last {

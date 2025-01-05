@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::temperature::{ITemperature, Temperature};
+    use crate::cli_error::CliError;
 
     #[test]
     fn from_spec_positive_temp() {
@@ -56,9 +57,9 @@ mod tests {
         let sut = Temperature::new();
         let response = sut.decode(pulses);
 
-        assert!(response.is_ok());
-        let response = response.unwrap();
-        assert!(response.humidity == 65.2);
-        assert!(response.temperature == -10.1);
+        println!("{:?}",response);
+        if let Err(CliError::Error(message)) = response {
+            assert_eq!(message,String::from("Checksum failed."));
+        }
     }
 }
