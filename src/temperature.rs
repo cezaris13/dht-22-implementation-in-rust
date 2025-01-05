@@ -1,10 +1,9 @@
 
 use crate::cli_error::CliError;
-use crate::dht::*;
 
 use rppal::gpio::{Gpio, Level, Mode, IoPin};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 #[cfg(test)]
 #[path = "./tests/temperature_tests.rs"]
@@ -37,6 +36,8 @@ pub trait ITemperature {
     fn to_decimal(&self, bits: &Vec<u8>, signed: bool) -> i32;
 
     fn check_checksum(&self, chunks: &Vec<Vec<u8>>) -> Result<(), CliError>;
+
+    fn tiny_sleep(&self);
 }
 
 impl ITemperature for Temperature {
@@ -49,7 +50,7 @@ impl ITemperature for Temperature {
         sleep(Duration::from_millis(20));
 
         dht_pin.set_mode(Mode::Input);
-        tiny_sleep();
+        self.tiny_sleep();
 
         // if the dht returns only high, the dht did not get proper data.
         self.read_pulses(&dht_pin, Level::High)?;
@@ -91,7 +92,7 @@ impl ITemperature for Temperature {
             pulse_count = pulse_count + 1;
 
             if pulse_count > MAX_COUNT {
-                return Err(CliError::Error(String::from("Timeout")));
+                return Err(CliError::Timeout);
             }
         }
         Ok(pulse_count)
@@ -168,10 +169,27 @@ impl ITemperature for Temperature {
 
         if let Some(last) = chunks_as_u8.last() {
             if sum != *last {
-               return Err(CliError::Error(String::from("Checksum failed.")));
+               return Err(CliError::Checksum);
             }
         }
 
         Ok(())
+    }
+
+    // 5 microsecond sleep
+    fn tiny_sleep(&self) {
+        let time = SystemTime::now();
+
+        loop {
+            match time.elapsed() {
+                Ok(duration) => {
+                    if duration >= Duration::from_micros(5) {
+                        return;
+                    }
+                }
+                // System clock has gone backwards, just abort
+                Err(_) => return,
+            }
+        }
     }
 }

@@ -57,9 +57,12 @@ mod tests {
         let sut = Temperature::new();
         let response = sut.decode(pulses);
 
-        println!("{:?}",response);
-        if let Err(CliError::Error(message)) = response {
-            assert_eq!(message,String::from("Checksum failed."));
+        match response {
+            Err(CliError::Checksum) => assert!(true),
+            _ => assert!(
+                false,
+                "Expected error: CliError::Checsum, but got a different result"
+            ),
         }
     }
 }

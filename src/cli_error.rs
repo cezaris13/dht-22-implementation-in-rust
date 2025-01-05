@@ -4,6 +4,8 @@ use std::fmt;
 #[derive(Debug)]
 pub enum CliError {
     Error(String),
+    Timeout,
+    Checksum,
     IOError(std::io::Error),
     GPIOError(rppal::gpio::Error),
 }
@@ -12,6 +14,8 @@ impl fmt::Display for CliError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Error(err) => write!(f, "Error in program: {}", err),
+            Self::Checksum => write!(f, "Checksum failed when trying to get measurements from the sensor."),
+            Self::Timeout => write!(f, "Timeout when trying to get measurements from the sensor."),
             Self::IOError(err) => write!(f, "IO error in program: {}", err),
             Self::GPIOError(err) => write!(f, "GPIO error in program: {}", err),
         }
@@ -24,6 +28,8 @@ impl error::Error for CliError {
             Self::IOError(err) => Some(err),
             Self::GPIOError(err) => Some(err),
             Self::Error(_) => None,
+            Self::Checksum => None,
+            Self::Timeout => None,
         }
     }
 }

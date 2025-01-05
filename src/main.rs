@@ -1,4 +1,3 @@
-mod dht;
 mod temperature;
 mod cli_error;
 
