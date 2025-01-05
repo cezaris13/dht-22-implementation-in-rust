@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::temperature::{ITemperature, Temperature};
     use crate::cli_error::CliError;
+    use crate::temperature::{ITemperature, Temperature};
 
     #[test]
     fn from_spec_positive_temp() {

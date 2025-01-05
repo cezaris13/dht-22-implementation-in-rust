@@ -1,0 +1,13 @@
+* DHT-22 sensor data retrieval using rust
+This is a simple project to show how you can use Rust to read data from a DHT-22 sensor. The DHT-22 is a popular, low-cost sensor that measures temperature and humidity. Check out the DHT-22 datasheet for all the technical details.
+
+#+begin_src bash
+make build
+make run
+#+end_src
+
+#+RESULTS:
+: cargo run
+
+** Links for implementing program for DHT-22 sensor
+[[https://www.sparkfun.com/datasheets/Sensors/Temperature/DHT22.pdf][DHT-22 datasheet]]

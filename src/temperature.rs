@@ -1,7 +1,6 @@
-
 use crate::cli_error::CliError;
 
-use rppal::gpio::{Gpio, Level, Mode, IoPin};
+use rppal::gpio::{Gpio, IoPin, Level, Mode};
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
@@ -15,7 +14,7 @@ const DHT_PULSES: usize = 41;
 #[derive(Debug)]
 pub struct TemperatureReading {
     pub temperature: f32,
-    pub humidity: f32
+    pub humidity: f32,
 }
 
 pub struct Temperature;
@@ -104,19 +103,10 @@ impl ITemperature for Temperature {
             .skip(1) // start from high pulse
             .step_by(2)
             .take(DHT_PULSES - 1)
-            .map(|x| {
-                if *x > 50 {
-                    1 as u8
-                } else {
-                    0 as u8
-                }
-            })
+            .map(|x| if *x > 50 { 1 as u8 } else { 0 as u8 })
             .collect::<Vec<u8>>();
 
-        let chunks :Vec<Vec<u8>> = pulses
-            .chunks(8)
-            .map(|s| s.into())
-            .collect();
+        let chunks: Vec<Vec<u8>> = pulses.chunks(8).map(|s| s.into()).collect();
 
         self.check_checksum(&chunks)?;
 
@@ -134,9 +124,9 @@ impl ITemperature for Temperature {
             .copied()
             .collect::<Vec<u8>>();
 
-        Ok (TemperatureReading {
+        Ok(TemperatureReading {
             temperature: self.to_decimal(&temperature, true) as f32 / 10.0,
-            humidity: self.to_decimal(&humidity, false) as f32 / 10.0
+            humidity: self.to_decimal(&humidity, false) as f32 / 10.0,
         })
     }
 
@@ -158,7 +148,7 @@ impl ITemperature for Temperature {
     fn check_checksum(&self, chunks: &Vec<Vec<u8>>) -> Result<(), CliError> {
         let chunks_as_u8: Vec<u8> = chunks
             .iter()
-            .map(|arr|  self.to_decimal(arr, false) as u8)
+            .map(|arr| self.to_decimal(arr, false) as u8)
             .collect();
 
         // checking checksum if first 4 numbers mod 255 are the same as the last one
@@ -169,7 +159,7 @@ impl ITemperature for Temperature {
 
         if let Some(last) = chunks_as_u8.last() {
             if sum != *last {
-               return Err(CliError::Checksum);
+                return Err(CliError::Checksum);
             }
         }
 

@@ -1,5 +1,5 @@
-mod temperature;
 mod cli_error;
+mod temperature;
 
 use crate::temperature::{ITemperature, Temperature};
 
